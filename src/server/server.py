@@ -340,26 +340,37 @@ async def get_favorite_list(email: str):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def generate_pdf_from_images(image_urls: list, output_pdf_path: str):
-    images = []  # Danh sách lưu trữ các hình ảnh
+async def generate_pdf_from_images(image_urls: list):
+    # Tạo buffer để lưu PDF trong bộ nhớ
+    pdf_buffer = BytesIO()
+    images = []
+    
     try:
         # Tải tất cả hình ảnh từ các URL
         async with httpx.AsyncClient() as client:
             for url in image_urls:
                 response = await client.get(url)
-                response.raise_for_status()  # Kiểm tra lỗi khi tải ảnh
+                response.raise_for_status()
                 
                 # Chuyển dữ liệu từ response thành đối tượng hình ảnh PIL
                 image_data = BytesIO(response.content)
                 image = Image.open(image_data)
-                images.append(image)  # Thêm hình ảnh vào danh sách
+                images.append(image)
         
         # Kiểm tra xem có hình ảnh nào không
         if images:
-            # Lưu tất cả hình ảnh vào PDF
-            images[0].save(output_pdf_path, save_all=True, append_images=images[1:], resolution=100.0, quality=95)
-            logger.info(f"PDF đã được tạo tại: {output_pdf_path}")
-            return output_pdf_path
+            # Lưu tất cả hình ảnh vào PDF buffer
+            images[0].save(
+                pdf_buffer,
+                format='PDF',
+                save_all=True,
+                append_images=images[1:],
+                resolution=100.0,
+                quality=95
+            )
+            # Đặt con trỏ về đầu buffer
+            pdf_buffer.seek(0)
+            return pdf_buffer
         else:
             logger.error("Không có hình ảnh nào được tải về.")
             raise HTTPException(status_code=500, detail="No images were downloaded.")
@@ -367,6 +378,9 @@ async def generate_pdf_from_images(image_urls: list, output_pdf_path: str):
     except httpx.RequestError as e:
         logger.error(f"Error fetching images: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching images: {e}")
+    except Exception as e:
+        logger.error(f"Error generating PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {e}")
 
 @app.post("/download_comic")
 async def download_comic(comic_id: str, chapter_ids: list[str]):
@@ -430,13 +444,20 @@ async def download_comic(comic_id: str, chapter_ids: list[str]):
         # Bước 3: Tạo PDF từ các hình ảnh đã tải về
         logger.info("Creating PDF from images")
         
-        # Tạo PDF từ hình ảnh và trả về kết quả
-        pdf_buffer = await generate_pdf_from_images(all_images, f"{comic_id}.pdf")
+        # Tạo PDF buffer từ hình ảnh
+        pdf_buffer = await generate_pdf_from_images(all_images)
+        
+        # Tạo tên file an toàn cho PDF
+        safe_filename = "".join(x for x in comic_id if x.isalnum() or x in ('-', '_'))
+        filename = f"{safe_filename}.pdf"
 
         return StreamingResponse(
-            pdf_buffer, 
-            media_type="application/pdf", 
-            headers={"Content-Disposition": f"attachment; filename={comic_id}.pdf"}
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/pdf"
+            }
         )
         
     except Exception as e:
