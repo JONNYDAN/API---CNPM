@@ -10,24 +10,24 @@ cd API---CNPM
 
 ## 2. Tạo môi trường ảo
 
-# Trên Windows
+Trên Windows
 ```bash
 python -m venv venv
 venv\Scripts\activate
 ```
 
-# Trên macOS/Linux
+Trên macOS/Linux
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-# 3. Cài đặt dependencies
+## 3. Cài đặt dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-# 4. Chạy ứng dụng
+## 4. Chạy ứng dụng
 ```bash
 uvicorn main:app --reload --port 8000
 ```
